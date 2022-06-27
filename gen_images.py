@@ -80,6 +80,7 @@ def make_transform(translate: Tuple[float,float], angle: float):
 @click.option('--translate', help='Translate XY-coordinate (e.g. \'0.3,1\')', type=parse_vec2, default='0,0', show_default=True, metavar='VEC2')
 @click.option('--rotate', help='Rotation angle in degrees', type=float, default=0, show_default=True, metavar='ANGLE')
 @click.option('--outdir', help='Where to save the output images', type=str, required=True, metavar='DIR')
+@click.option('--device', help='CUDA or CPU', type=click.Choice(['cuda', 'cpu']), default='cuda', metavar='DEVICE')
 def generate_images(
     network_pkl: str,
     seeds: List[int],
@@ -90,13 +91,14 @@ def generate_images(
     outdir: str,
     translate: Tuple[float,float],
     rotate: float,
-    class_idx: Optional[int]
+    class_idx: Optional[int],
+    device: str,
 ):
     print('Loading networks from "%s"...' % network_pkl)
-    device = torch.device('cuda')
+    torch_device = torch.device(device)
     with dnnlib.util.open_url(network_pkl) as f:
         G = legacy.load_network_pkl(f)['G_ema']
-        G = G.eval().requires_grad_(False).to(device)
+        G = G.eval().requires_grad_(False).to(torch_device)
 
     os.makedirs(outdir, exist_ok=True)
 
@@ -112,7 +114,7 @@ def generate_images(
             m = np.linalg.inv(m)
             G.synthesis.input.transform.copy_(torch.from_numpy(m))
 
-        w = gen_utils.get_w_from_seed(G, batch_sz, device, truncation_psi, seed=seed,
+        w = gen_utils.get_w_from_seed(G, batch_sz, torch_device, truncation_psi, seed=seed,
                                       centroids_path=centroids_path, class_idx=class_idx)
         img = gen_utils.w_to_img(G, w, to_np=True)
         PIL.Image.fromarray(gen_utils.create_image_grid(img), 'RGB').save(f'{outdir}/seed{seed:04d}.png')
